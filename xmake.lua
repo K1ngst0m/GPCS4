@@ -28,7 +28,7 @@ end
 
 
 includes("3rdParty/glfw")
--- includes("3rdParty/rtaudio")
+includes("3rdParty/rtaudio")
 -- includes("3rdParty/zydis")
 -- includes("3rdParty/tinydbr")
 
@@ -113,7 +113,7 @@ target("GPCS4")
     end
 
     add_deps("glfw")
-    -- add_deps("rtaudio")
+    add_deps("rtaudio")
     -- add_deps("zydis")
     -- add_deps("tinydbr")
 

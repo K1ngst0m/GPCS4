@@ -7,7 +7,9 @@ LOG_CHANNEL(Platform.UtilMemory);
 #include <Windows.h>
 #undef WIN32_LEAN_AND_MEAN
 #else
-
+#include <sys/mman.h>
+#include <errno.h>
+#include <stdlib.h>
 #endif
 
 namespace plat
@@ -224,7 +226,136 @@ namespace plat
 
 #elif defined(GPCS4_LINUX)
 
-	// TODO: Other platform implementation
+	// GPCS4 flag to Linux flag
+	inline int GetTypeFlag(VM_ALLOCATION_TYPE nOldFlag)
+	{
+		int nNewFlag = MAP_PRIVATE | MAP_ANONYMOUS; // Default flags
+
+		do
+		{
+			if (nOldFlag & VMAT_RESERVE)
+			{
+				// In Linux, mmap always reserves the memory.
+				// But we can use MAP_NORESERVE to indicate that the system should not reserve swap space.
+				nNewFlag |= MAP_NORESERVE;
+			}
+
+			if (nOldFlag & VMAT_COMMIT)
+			{
+				// In Linux, mmap always commits the memory, so there's no equivalent flag.
+				// We just keep the default flags.
+			}
+
+		} while (false);
+
+		return nNewFlag;
+	}
+
+	// GPCS4 flag to Linux flag
+	inline int GetProtectFlag(VM_PROTECT_FLAG nOldFlag)
+	{
+		int nNewFlag = 0;
+
+		do
+		{
+			if (nOldFlag & VMPF_NOACCESS)
+			{
+				nNewFlag = PROT_NONE;
+				break;
+			}
+
+			if (nOldFlag & VMPF_CPU_READ)
+			{
+				nNewFlag = PROT_READ;
+			}
+
+			if (nOldFlag & VMPF_CPU_WRITE)
+			{
+				nNewFlag |= PROT_WRITE;
+			}
+
+			if (nOldFlag & VMPF_CPU_EXEC)
+			{
+				nNewFlag |= PROT_EXEC;
+			}
+
+		} while (false);
+
+		return nNewFlag;
+	}
+
+	void* VMAllocate(void* pAddress, size_t nSize, VM_ALLOCATION_TYPE nType, VM_PROTECT_FLAG nProtect)
+	{
+		int flags = GetTypeFlag(nType);
+		int protection = GetProtectFlag(nProtect);
+
+		return mmap(pAddress, nSize, protection, flags, -1, 0);
+	}
+
+	void* VMAllocateAlign(void* pAddress, size_t nSize, size_t nAlign, VM_ALLOCATION_TYPE nType, VM_PROTECT_FLAG nProtect)
+	{
+		// Linux's mmap automatically aligns to page size
+		int protectFlag = GetProtectFlag(nProtect);
+		int typeFlag = GetTypeFlag(nType);
+		return mmap(pAddress, nSize, protectFlag, typeFlag, -1, 0);
+	}
+
+	void VMFree(void* pAddress)
+	{
+		munmap(pAddress, size);
+	}
+
+	bool VMProtect(void* pAddress, size_t nSize, VM_PROTECT_FLAG nNewProtect, VM_PROTECT_FLAG* pOldProtect)
+	{
+		int newProtectFlag = GetProtectFlag(nNewProtect);
+		return mprotect(pAddress, nSize, newProtectFlag) == 0;
+	}
+
+	bool VMQuery(void* pAddress, MemoryInformation* pInfo)
+	{
+		FILE* mapsFile = fopen("/proc/self/maps", "r");
+		if (!mapsFile)
+		{
+			return false;
+		}
+
+		uintptr_t addr = (uintptr_t)pAddress;
+		uintptr_t start, end;
+		while (fscanf(mapsFile, "%lx-%lx", &start, &end) == 2)
+		{
+			if (start <= addr && addr < end)
+			{
+				pInfo->pRegionStart = (void*)start;
+				pInfo->nRegionSize = end - start;
+				// You can fill in more details here if needed
+				fclose(mapsFile);
+				return true;
+			}
+		}
+
+		fclose(mapsFile);
+		return false;
+	}
+
+	void* aligned_malloc(size_t align, size_t size)
+	{
+		errno = 0;
+		void* ret = nullptr;
+		if (posix_memalign(&ret, align, size) != 0)
+		{
+			// posix_memalign will return nonzero on failure and set ret to NULL
+			if (errno == ENOMEM)
+			{
+				ret = nullptr;
+			}
+		}
+		return ret;
+	}
+
+	void aligned_free(void* ptr)
+	{
+		free(ptr);
+	}
 
 #endif  // GPCS4_WINDOWS
 

@@ -142,7 +142,7 @@ int32_t MemoryAllocator::mapDirectMemory(
 
 int32_t MemoryAllocator::memoryUnmap(void* addr, size_t len)
 {
-	plat::VMFree(addr);
+	plat::VMFree(addr, len);
 
 	auto iter = findMemoryBlock(addr);
 	if (iter.has_value())
